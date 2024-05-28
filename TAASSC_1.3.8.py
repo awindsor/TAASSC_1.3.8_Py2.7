@@ -236,7 +236,8 @@ class MyApp:
 		#print self.dirname
 		if self.dirname == "":
 			self.displayinputtext = "(No Folder Chosen)"
-		else: self.displayinputtext = '.../'+self.dirname.split('/')[-1]
+		else: 
+			self.displayinputtext = '.../'+self.dirname.split('/')[-1]
 		self.inputdirchosen.config(text = self.displayinputtext)
 		
 
@@ -2001,7 +2002,7 @@ def main(indir, outfile,check_list):
 			variance = map(lambda x: (x-mean)**2, items)
 			stdev = math.sqrt(safe_divide(sum(variance),len(variance)))
 			for values in items:
-				z_value = (values-mean)/stdev
+				z_value = safe_divide(values-mean,stdev)
 				z_list.append(z_value)
 			z_dict[components] = z_list
 		
