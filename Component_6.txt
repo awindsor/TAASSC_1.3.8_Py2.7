@@ -1,0 +1,4 @@
+all_av_approx_collexeme	.924
+all_av_approx_collexeme_type	.894
+all_av_delta_p_const_cue_type	.825
+ccomp_per_cl	.629

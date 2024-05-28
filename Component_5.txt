@@ -1,0 +1,5 @@
+all_av_construction_freq	.884
+all_av_construction_freq_type	.867
+all_av_construction_freq_log_stdev	.710
+dobj_per_cl	.490
+av_dobj_deps	.445

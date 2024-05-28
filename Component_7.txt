@@ -1,0 +1,4 @@
+all_construction_ttr	.926
+all_lemma_ttr	.872
+all_lemma_construction_ttr	.792
+all_av_lemma_construction_freq_type	.655

@@ -1,0 +1,5 @@
+det_all_nominal_deps_NN_struct	.947
+det_all_nominal_deps_struct	.849
+det_pobj_deps_struct	.819
+det_dobj_deps_struct	.719
+det_nsubj_deps_NN_struct	.630

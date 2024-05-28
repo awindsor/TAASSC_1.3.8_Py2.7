@@ -1,0 +1,4 @@
+all_construction_attested	.873
+all_lemma_construction_attested	.838
+all_av_construction_freq_log	.647
+all_av_lemma_freq_log	.642

@@ -1,0 +1,8 @@
+all_av_lemma_construction_freq	.908
+all_av_lemma_freq	.908
+all_av_lemma_construction_freq_log_stdev	.852
+all_av_lemma_freq_log_stdev	.850
+all_av_lemma_construction_freq_log	.728
+ncomp_per_cl	.728
+all_av_lemma_freq_type	.706
+acomp_per_cl	.560

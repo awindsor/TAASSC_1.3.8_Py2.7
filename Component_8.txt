@@ -1,0 +1,4 @@
+poss_all_nominal_deps_struct	.904
+poss_nsubj_deps_struct	.734
+poss_dobj_deps_struct	.718
+poss_pobj_deps_struct	.711

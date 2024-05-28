@@ -1,0 +1,7 @@
+nn_all_nominal_deps_struct	.810
+nn_dobj_deps_struct	.797
+nominal_deps_stdev	.789
+nn_nsubj_deps_NN_struct	.727
+pobj_stdev	.667
+dobj_stdev	.586
+nsubj_stdev	.576
