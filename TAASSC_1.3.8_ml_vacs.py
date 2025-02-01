@@ -21,7 +21,6 @@ import string
 import glob
 import subprocess
 import os
-from collections import Counter
 from threading import Thread
 import queue
 import string
@@ -49,11 +48,6 @@ def resource_path(relative):
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, relative)
     return os.path.join(relative)
-
-
-def start_watcher(def2, count, folder, dataQueue, root):
-    t2 = Thread(target=def2, args=(count, folder, dataQueue, root))
-    t2.start()
 
 
 def watcher(count, folder, dataQueue, root):
@@ -85,13 +79,13 @@ def watcher(count, folder, dataQueue, root):
                 + " files."
             )
         dataQueue.put(output)
-        root.update_idletasks()
+        QApplication.processEvents()
 
         time.sleep(0.3)  # seconds it waits before checking again
 
     final_message = "CoreNLP has tagged " + str(count) + " of " + str(count) + " files."
     dataQueue.put(output)
-    root.update_idletasks()
+    QApplication.processEvents()
 
 
 def call_stan_corenlp_pos(
@@ -313,463 +307,470 @@ class MyApp(QWidget):
 
 def main(language, indir, outfile):
     data_filename = outfile
-    data_file = open(data_filename, "w")
-    clause_header = [
-        "lemma",
-        "word",
-        "sophistication_vac",
-        "filled_sophistication_vac",
-        "clause_complexity_vac",
-        "filename",
-        "sentence_text",
-        "position",
-    ]
-    data_file.write("\t".join(clause_header) + "\n")
+    with open(data_filename, "w") as data_file:
+        clause_header = [
+            "lemma",
+            "word",
+            "sophistication_vac",
+            "filled_sophistication_vac",
+            "clause_complexity_vac",
+            "filename",
+            "sentence_text",
+            "position",
+        ]
+        data_file.write("\t".join(clause_header) + "\n")
 
-    #######
+        #######
 
-    if not os.path.exists(resource_path("parsed_files/")):
-        os.makedirs(resource_path("parsed_files/"))
+        if not os.path.exists(resource_path("parsed_files/")):
+            os.makedirs(resource_path("parsed_files/"))
 
-    if not os.path.exists(resource_path("to_process/")):
-        os.makedirs(resource_path("to_process/"))
+        if not os.path.exists(resource_path("to_process/")):
+            os.makedirs(resource_path("to_process/"))
 
-    folder_list = [resource_path("parsed_files/"), resource_path("to_process/")]
+        folder_list = [resource_path("parsed_files/"), resource_path("to_process/")]
 
-    dataQueue.put("Importing corpus files (this may take a while)...")
-    root.update_idletasks()
-    for folder in folder_list:
-        for the_file in os.listdir(folder):
-            file_path = os.path.join(folder, the_file)
-            os.unlink(file_path)
+        dataQueue.put("Importing corpus files (this may take a while)...")
+        QApplication.processEvents()
+        for folder in folder_list:
+            for the_file in os.listdir(folder):
+                file_path = os.path.join(folder, the_file)
+                os.unlink(file_path)
 
-        copy_files = glob.glob(indir + "/*.txt")
+            copy_files = glob.glob(indir + "/*.txt")
 
-        for thing in copy_files:
-            thing_1 = thing
-            if system == "M" or system == "L":
-                thing = thing.split("/")[-1]
-                thing = resource_path("to_process/") + thing
-            elif system == "W":
-                thing = thing.split("\\")[-1]
-                thing = resource_path("to_process\\") + thing
-            shutil.copyfile(thing_1, thing)
-        input_folder = resource_path("to_process/")
+            for thing in copy_files:
+                thing_1 = thing
+                if system == "M" or system == "L":
+                    thing = thing.split("/")[-1]
+                    thing = resource_path("to_process/") + thing
+                elif system == "W":
+                    thing = thing.split("\\")[-1]
+                    thing = resource_path("to_process\\") + thing
+                shutil.copyfile(thing_1, thing)
+            input_folder = resource_path("to_process/")
 
-        list_of_files = glob.glob(input_folder + "*.txt")
-        ###print "list of files ", list_of_files
-        file_list_file = open(input_folder + "_filelist.txt", "w")
+            list_of_files = glob.glob(input_folder + "*.txt")
+            ###print "list of files ", list_of_files
+            with open(input_folder + "_filelist.txt", "w") as file_list_file:
+                file_list = input_folder + "_filelist.txt"
+                ###print "file list ", file_list
+                for line in list_of_files:
+                    line = line + "\n"
+                    file_list_file.write(line)
 
-        file_list = input_folder + "_filelist.txt"
-        ###print "file list ", file_list
-        for line in list_of_files:
-            line = line + "\n"
-            file_list_file.write(line)
-        file_list_file.flush()
-        file_list_file.close()
+        current_directory = resource_path("")
+        stan_file_list = input_folder + "_filelist.txt"
+        stan_output_folder = resource_path("parsed_files/")
+        memory = "3"
+        nthreads = "2"
+        dataQueue.put("Starting Stanford CoreNLP...")
+        QApplication.processEvents()
 
-    current_directory = resource_path("")
-    stan_file_list = input_folder + "_filelist.txt"
-    stan_output_folder = resource_path("parsed_files/")
-    memory = "3"
-    nthreads = "2"
-    dataQueue.put("Starting Stanford CoreNLP...")
-    root.update_idletasks()
-
-    call_stan_corenlp_pos(
-        current_directory,
-        language,
-        stan_file_list,
-        stan_output_folder,
-        memory,
-        nthreads,
-        system,
-        dataQueue,
-        root,
-        parse_type=",depparse",
-    )
-
-    try:
-        import xml.etree.cElementTree as ET
-    except ImportError:
-        import xml.etree.ElementTree as ET
-    p_files_list = glob.glob(
-        resource_path("parsed_files/*.xml")
-    )  # Create a list of all files in target folder
-
-    total_nfiles = len(p_files_list)
-
-    nfiles = 0  # This is a counter to see how many files have been processed
-    counter = 0
-
-    comp_file_list = []
-
-    verb_tags = "VB VBZ VBP VBD VBN VBG".split(" ")  # This is a list of verb tags
-    exclusions = "aux auxpass nsubj dobj iobj amod"
-
-    noun_tags = "NN NNS NNP NNPS VBG".split(
-        " "
-    )  # note that VBG is included because this list is only used for looking at dependents that will be a nominal
-    single_quotes = "u\u2018 u\u2019 u'\u02BC'".split(" ")
-
-    nominals = "NN NNP NNPS NNS PRP PRP$ CD DT".split(" ")
-    adjectives = "JJ JJR JJS".split(" ")
-    verbs = "VB VBZ VBP VBD VBN VBG".split(" ")
-    other = "RB ".split(" ")
-    noun_mod = [
-        "amod",
-        "appos",
-        "det",
-        "goeswith",
-        "mwe",
-        "nn",
-        "num",
-        "poss",
-        "cop",
-        "advmod",
-        "advcl",
-        "rcmod",
-        "vmod",
-    ]  # note: cop is thrown in for convenience; #advmod and advcl added in .8.5 , "advmod", "advcl"
-
-    for files in p_files_list:
-        counter += 1
-        nwords = 0
-        nsent = 0
-
-        punctuation = ". , ? ! ) ( % / - _ -LRB- -RRB- SYM ".split(" ")
-
-        processed_update = (
-            "TAASSC has processed: "
-            + str(nfiles)
-            + " of "
-            + str(total_nfiles)
-            + " files."
+        call_stan_corenlp_pos(
+            current_directory,
+            language,
+            stan_file_list,
+            stan_output_folder,
+            memory,
+            nthreads,
+            system,
+            dataQueue,
+            root,
+            parse_type=",depparse",
         )
-        dataQueue.put(processed_update)  # output for user
-        root.update_idletasks()
 
-        outfilename = files.split("/")[-1]
-        outfilename = outfilename.replace(".xml", "")
+        try:
+            import xml.etree.cElementTree as ET
+        except ImportError:
+            import xml.etree.ElementTree as ET
+        p_files_list = glob.glob(
+            resource_path("parsed_files/*.xml")
+        )  # Create a list of all files in target folder
 
-        comp_file_list.append(outfilename)
+        total_nfiles = len(p_files_list)
 
-        tree = ET.ElementTree(file=files)  # The file is opened by the XML parser
+        nfiles = 0  # This is a counter to see how many files have been processed
+        counter = 0
 
-        ###for Clause Complexity and Sophistication
+        comp_file_list = []
 
-        constructicon = []  # holder for the context-free VACs
-        prep_constructicon = []
-        lemma_constructicon = []  # holder for the lemma-sensitive VACs
-        lemma_constructicon_no_vcop = []  # holder for non-copular constructions
-        lemma_constructicon_aux = []  #
-        prep_lemma_contructicon = []  #
+        verb_tags = "VB VBZ VBP VBD VBN VBG".split(" ")  # This is a list of verb tags
+        exclusions = "aux auxpass nsubj dobj iobj amod"
 
-        #### THE NEXT SECTION CONVERTS THE TREE TO AN APPROXIMATION OF -makeCopulaHead #####
-        for sentences in tree.iter("sentence"):
-            nsent += 1
-            phrase_sentence = []
+        noun_tags = "NN NNS NNP NNPS VBG".split(
+            " "
+        )  # note that VBG is included because this list is only used for looking at dependents that will be a nominal
+        single_quotes = "u\u2018 u\u2019 u'\u02BC'".split(" ")
 
-            noun_list = []
-            pronoun_list = []
-            for tokens in sentences.iter("token"):
-                phrase_sentence.append(tokens[0].text)
-                if tokens[4].text in punctuation:
-                    continue
-                nwords += 1
-                if tokens[4].text in noun_tags:
-                    noun_list.append(tokens.get("id"))
-                if tokens[4].text == "PRP":
-                    pronoun_list.append(tokens.get("id"))
+        nominals = "NN NNP NNPS NNS PRP PRP$ CD DT".split(" ")
+        adjectives = "JJ JJR JJS".split(" ")
+        verbs = "VB VBZ VBP VBD VBN VBG".split(" ")
+        other = "RB ".split(" ")
+        noun_mod = [
+            "amod",
+            "appos",
+            "det",
+            "goeswith",
+            "mwe",
+            "nn",
+            "num",
+            "poss",
+            "cop",
+            "advmod",
+            "advcl",
+            "rcmod",
+            "vmod",
+        ]  # note: cop is thrown in for convenience; #advmod and advcl added in .8.5 , "advmod", "advcl"
 
-            cop_list = (
-                []
-            )  # list of copular dependency relationships in sentences (tuples)
-            cop_list_simple = []
+        for files in p_files_list:
+            counter += 1
+            nwords = 0
+            nsent = 0
 
-            for deps in sentences.iter("dependencies"):  # iterates through dependencies
+            punctuation = ". , ? ! ) ( % / - _ -LRB- -RRB- SYM ".split(" ")
 
-                if (
-                    deps.get("type") == "collapsed-ccprocessed-dependencies"
-                ):  # only iterate through cc-processed-dependencies
+            processed_update = (
+                "TAASSC has processed: "
+                + str(nfiles)
+                + " of "
+                + str(total_nfiles)
+                + " files."
+            )
+            dataQueue.put(processed_update)  # output for user
+            QApplication.processEvents()
 
-                    for dependencies in deps.iter(
-                        "dep"
-                    ):  # iterate through the dependencies
+            outfilename = files.split("/")[-1]
+            outfilename = outfilename.replace(".xml", "")
 
+            comp_file_list.append(outfilename)
+
+            tree = ET.ElementTree(file=files)  # The file is opened by the XML parser
+
+            ###for Clause Complexity and Sophistication
+
+            constructicon = []  # holder for the context-free VACs
+            prep_constructicon = []
+            lemma_constructicon = []  # holder for the lemma-sensitive VACs
+            lemma_constructicon_no_vcop = []  # holder for non-copular constructions
+            lemma_constructicon_aux = []  #
+            prep_lemma_contructicon = []  #
+
+            #### THE NEXT SECTION CONVERTS THE TREE TO AN APPROXIMATION OF -makeCopulaHead #####
+            for sentences in tree.iter("sentence"):
+                nsent += 1
+                phrase_sentence = []
+
+                noun_list = []
+                pronoun_list = []
+                for tokens in sentences.iter("token"):
+                    phrase_sentence.append(tokens[0].text)
+                    if tokens[4].text in punctuation:
+                        continue
+                    nwords += 1
+                    if tokens[4].text in noun_tags:
+                        noun_list.append(tokens.get("id"))
+                    if tokens[4].text == "PRP":
+                        pronoun_list.append(tokens.get("id"))
+
+                cop_list = (
+                    []
+                )  # list of copular dependency relationships in sentences (tuples)
+                cop_list_simple = []
+
+                for deps in sentences.iter(
+                    "dependencies"
+                ):  # iterates through dependencies
+
+                    if (
+                        deps.get("type") == "collapsed-ccprocessed-dependencies"
+                    ):  # only iterate through cc-processed-dependencies
+
+                        for dependencies in deps.iter(
+                            "dep"
+                        ):  # iterate through the dependencies
+
+                            if (
+                                dependencies.get("type") == "cop"
+                            ):  # if the type is copular...
+
+                                cop_list.append(
+                                    (
+                                        dependencies[0].get("idx"),
+                                        dependencies[0].text,
+                                        dependencies[1].get("idx"),
+                                        dependencies[1].text,
+                                    )
+                                )  # this stores the governor idx and the governor text, and then the dep idx and dep text as a tuple
+                                cop_list_simple.append(
+                                    dependencies[1].get("idx")
+                                )  # this should be the id for the copular_verb
+
+                    else:
+                        sentences.remove(
+                            deps
+                        )  # this does not get rid of collapsed dependencies. Not sure why.
+
+                for entries in cop_list:
+                    ##print entries
+                    comp_check = "no"
+                    for dependencies in deps.iter("dep"):
                         if (
                             dependencies.get("type") == "cop"
-                        ):  # if the type is copular...
+                            and dependencies[0].get("idx") == entries[0]
+                        ):  # if the dependency is copular and the item is the one we are concerned with in this iteration:
+                            for word in sentences.iter(
+                                "token"
+                            ):  # iterate through tokens to find the pos tag
+                                ##print word[0].text
+                                if word.get("id") == entries[0]:
+                                    pos = word[4].text
+                                    # nom_comp_position = word.get("id")
+                                    ##print pos
 
-                            cop_list.append(
-                                (
-                                    dependencies[0].get("idx"),
-                                    dependencies[0].text,
-                                    dependencies[1].get("idx"),
-                                    dependencies[1].text,
-                                )
-                            )  # this stores the governor idx and the governor text, and then the dep idx and dep text as a tuple
-                            cop_list_simple.append(
-                                dependencies[1].get("idx")
-                            )  # this should be the id for the copular_verb
+                            if (
+                                pos in nominals
+                            ):  # set appropriate relationship (this may be problematic for finite versus non-finite complements)
+                                dependencies.set("type", "ncomp")
+                                comp_check = "yes"
+                            if pos in adjectives:
+                                dependencies.set("type", "acomp")
+                                comp_check = "yes"
+                            if pos in verbs:
+                                dependencies.set("type", "vcomp")
+                            if pos in other:
+                                dependencies.set("type", "other")
 
-                else:
-                    sentences.remove(
-                        deps
-                    )  # this does not get rid of collapsed dependencies. Not sure why.
+                            dependencies[0].set(
+                                "idx", entries[2]
+                            )  # set the governor as the cop verb
+                            dependencies[0].text = entries[
+                                3
+                            ]  # set the governor as the cop verb
+                            dependencies[1].set(
+                                "idx", entries[0]
+                            )  # set the dependent as the complement
+                            dependencies[1].text = entries[
+                                1
+                            ]  # set the dependent as the complement
 
-            for entries in cop_list:
-                ##print entries
-                comp_check = "no"
-                for dependencies in deps.iter("dep"):
-                    if (
-                        dependencies.get("type") == "cop"
-                        and dependencies[0].get("idx") == entries[0]
-                    ):  # if the dependency is copular and the item is the one we are concerned with in this iteration:
-                        for word in sentences.iter(
-                            "token"
-                        ):  # iterate through tokens to find the pos tag
-                            ##print word[0].text
-                            if word.get("id") == entries[0]:
-                                pos = word[4].text
-                                # nom_comp_position = word.get("id")
-                                ##print pos
-
-                        if (
-                            pos in nominals
-                        ):  # set appropriate relationship (this may be problematic for finite versus non-finite complements)
-                            dependencies.set("type", "ncomp")
-                            comp_check = "yes"
-                        if pos in adjectives:
-                            dependencies.set("type", "acomp")
-                            comp_check = "yes"
-                        if pos in verbs:
-                            dependencies.set("type", "vcomp")
-                        if pos in other:
-                            dependencies.set("type", "other")
-
-                        dependencies[0].set(
-                            "idx", entries[2]
-                        )  # set the governor as the cop verb
-                        dependencies[0].text = entries[
-                            3
-                        ]  # set the governor as the cop verb
-                        dependencies[1].set(
-                            "idx", entries[0]
-                        )  # set the dependent as the complement
-                        dependencies[1].text = entries[
-                            1
-                        ]  # set the dependent as the complement
-
-                        continue  # if this fixed the comp, continue to the next dependency
-
-                    if (
-                        dependencies.get("type") not in noun_mod
-                    ):  # if the dependency isn't one that would only work for an nominal (this may need tweaking):
-
-                        if dependencies.get("type") != "tmod" and comp_check == "yes":
-                            continue
+                            continue  # if this fixed the comp, continue to the next dependency
 
                         if (
-                            dependencies[0].get("idx") == entries[0]
-                        ):  # if the governor is the previous cop governor - change to cop
-                            dependencies[0].set("idx", entries[2])  # changes idx
-                            dependencies[0].text = entries[3]  # changes text
+                            dependencies.get("type") not in noun_mod
+                        ):  # if the dependency isn't one that would only work for an nominal (this may need tweaking):
 
-                        if (
-                            dependencies[1].get("idx") == entries[0]
-                        ):  # if the dependent is the previous cop governor - change to cop
-                            dependencies[1].set("idx", entries[2])  # changes idx
-                            dependencies[1].text = entries[3]  # changes text
+                            if (
+                                dependencies.get("type") != "tmod"
+                                and comp_check == "yes"
+                            ):
+                                continue
 
-            ### END COPULA CONVERSION SECTION ###
+                            if (
+                                dependencies[0].get("idx") == entries[0]
+                            ):  # if the governor is the previous cop governor - change to cop
+                                dependencies[0].set("idx", entries[2])  # changes idx
+                                dependencies[0].text = entries[3]  # changes text
 
-            ### Begin Clause Complexity Section ###
+                            if (
+                                dependencies[1].get("idx") == entries[0]
+                            ):  # if the dependent is the previous cop governor - change to cop
+                                dependencies[1].set("idx", entries[2])  # changes idx
+                                dependencies[1].text = entries[3]  # changes text
 
-            token_store = []  # This will be a holder of tuples for id, word, lemma, pos
-            sentence = []  # stores all of the words so sentence can be stored
-            # pos = [] #stores POS information so that it can be easily retrieved later
-            verbs = []
-            excluded_verbs = []
-            gerunds = []
-            infinitives = []
-            main_verbs = []
-            max_sentence_length = 100
+                ### END COPULA CONVERSION SECTION ###
 
-            if len(list(sentences.iter("token"))) > max_sentence_length:
-                continue
+                ### Begin Clause Complexity Section ###
 
-            for tokens in sentences.iter("token"):
-                token_store.append(
-                    (
-                        tokens.get("id"),
-                        tokens[0].text.lower(),
-                        tokens[1].text,
-                        tokens[4].text,
+                token_store = (
+                    []
+                )  # This will be a holder of tuples for id, word, lemma, pos
+                sentence = []  # stores all of the words so sentence can be stored
+                # pos = [] #stores POS information so that it can be easily retrieved later
+                verbs = []
+                excluded_verbs = []
+                gerunds = []
+                infinitives = []
+                main_verbs = []
+                max_sentence_length = 100
+
+                if len(list(sentences.iter("token"))) > max_sentence_length:
+                    continue
+
+                for tokens in sentences.iter("token"):
+                    token_store.append(
+                        (
+                            tokens.get("id"),
+                            tokens[0].text.lower(),
+                            tokens[1].text,
+                            tokens[4].text,
+                        )
                     )
-                )
-                sentence.append(tokens[0].text)  # this is word
+                    sentence.append(tokens[0].text)  # this is word
 
-            inf = "no"
-            for items in token_store:
-                if items[3] in verb_tags:
-                    for dependents in sentences.iter("dependencies"):
+                inf = "no"
+                for items in token_store:
+                    if items[3] in verb_tags:
+                        for dependents in sentences.iter("dependencies"):
+                            if (
+                                dependents.get("type")
+                                == "collapsed-ccprocessed-dependencies"
+                            ):
+                                for dep in dependents.iter("dep"):
+                                    if (
+                                        dep[1].get("idx") == items[0]
+                                        and dep.get("type") in exclusions
+                                    ):
+                                        excluded_verbs.append(
+                                            items[0]
+                                        )  # adds id to excluded verbs
+                    if items[3] == "VBG":
+                        gerunds.append(
+                            items[0]
+                        )  # adds id to gerunds (actually any -ing verb)
+
+                    if items[3] == "VB" and inf == "yes":
+                        infinitives.append(items[0])
+
+                    if items[3] == "TO":
+                        inf = "yes"
+                    else:
+                        inf = "no"
+
+                for items in token_store:
+                    if items[0] in excluded_verbs:
+                        # print "excluded verb", items[0]
+                        continue
+                    if items[3] in verb_tags:
+                        main_verbs.append(items)
+
+                for items in main_verbs:
+
+                    if items[0] in cop_list_simple:
+                        verb_type = "vcop"
+                    else:
+                        verb_type = "v"
+
+                    verb_form = items[2]
+                    word_entry = items[1].lower()
+
+                    if "\xa0" in verb_form:
+                        verb_form = verb_form.replace("\xa0", " ")
+                    for apostrophe in single_quotes:
+                        if apostrophe in verb_form:
+                            verb_form = verb_form.replace(apostrophe, "'")
+                    if "-" in verb_form:
+                        verb_form = verb_form.replace("-", "_")
+
+                    VAC = [
+                        [int(items[0]), verb_type, verb_form]
+                    ]  # format ID, v or v_cop, lemma form
+
+                    for dependencies in sentences.iter("dependencies"):
                         if (
-                            dependents.get("type")
+                            dependencies.get("type")
                             == "collapsed-ccprocessed-dependencies"
                         ):
-                            for dep in dependents.iter("dep"):
-                                if (
-                                    dep[1].get("idx") == items[0]
-                                    and dep.get("type") in exclusions
-                                ):
-                                    excluded_verbs.append(
-                                        items[0]
-                                    )  # adds id to excluded verbs
-                if items[3] == "VBG":
-                    gerunds.append(
-                        items[0]
-                    )  # adds id to gerunds (actually any -ing verb)
+                            for dependents in dependencies.iter("dep"):
+                                if dependents[0].get("idx") == items[0]:
+                                    dependent_type = dependents.get(
+                                        "type"
+                                    )  # this allows the program to fix the copula error - nominal complements are now called "ncomp"
+                                    dependent_id = int(dependents[1].get("idx"))
+                                    dependent_form = dependents[1].text
 
-                if items[3] == "VB" and inf == "yes":
-                    infinitives.append(items[0])
+                                    if dependent_type == "punct":
+                                        continue
 
-                if items[3] == "TO":
-                    inf = "yes"
-                else:
-                    inf = "no"
+                                    if (
+                                        dependent_type == "xcomp"
+                                        and token_store[
+                                            (int(dependents[1].get("idx")) - 1)
+                                        ][3]
+                                        in nominals
+                                    ):
+                                        dependent_type = "ncomp"
 
-            for items in token_store:
-                if items[0] in excluded_verbs:
-                    # print "excluded verb", items[0]
-                    continue
-                if items[3] in verb_tags:
-                    main_verbs.append(items)
+                                    if (
+                                        dependent_type == "aux"
+                                        and token_store[
+                                            (int(dependents[1].get("idx")) - 1)
+                                        ][3]
+                                        == "MD"
+                                    ):
+                                        dependent_type = "modal"
 
-            for items in main_verbs:
+                                    VAC.append(
+                                        [dependent_id, dependent_type, dependent_form]
+                                    )
 
-                if items[0] in cop_list_simple:
-                    verb_type = "vcop"
-                else:
-                    verb_type = "v"
+                    VAC = sorted(VAC, key=lambda x: int(x[0]))
+                    auxilliaries = ["aux", "auxpass", "modal"]
+                    pre_simple_VAC = []
+                    simple_VAC = []
+                    complex_VAC = []
+                    prep_VAC = []
+                    simple_VAC_aux = []
 
-                verb_form = items[2]
-                word_entry = items[1].lower()
+                    for item in VAC:
+                        simple_VAC_aux.append(item[1])
+                        if item[1] not in auxilliaries:
+                            pre_simple_VAC.append(item)
 
-                if "\xa0" in verb_form:
-                    verb_form = verb_form.replace("\xa0", " ")
-                for apostrophe in single_quotes:
-                    if apostrophe in verb_form:
-                        verb_form = verb_form.replace(apostrophe, "'")
-                if "-" in verb_form:
-                    verb_form = verb_form.replace("-", "_")
+                    # print len(pre_simple_VAC), pre_simple_VAC
 
-                VAC = [
-                    [int(items[0]), verb_type, verb_form]
-                ]  # format ID, v or v_cop, lemma form
+                    if len(pre_simple_VAC) < 2 and str(pre_simple_VAC[0][0]) in gerunds:
+                        # print "g skip"
+                        continue
 
-                for dependencies in sentences.iter("dependencies"):
-                    if dependencies.get("type") == "collapsed-ccprocessed-dependencies":
-                        for dependents in dependencies.iter("dep"):
-                            if dependents[0].get("idx") == items[0]:
-                                dependent_type = dependents.get(
-                                    "type"
-                                )  # this allows the program to fix the copula error - nominal complements are now called "ncomp"
-                                dependent_id = int(dependents[1].get("idx"))
-                                dependent_form = dependents[1].text
+                    if (
+                        len(pre_simple_VAC) < 2
+                        and str(pre_simple_VAC[0][0]) in infinitives
+                    ):
+                        # print "skip"
+                        continue
 
-                                if dependent_type == "punct":
-                                    continue
+                    if len(pre_simple_VAC) < 2 and pre_simple_VAC[0][2] == "be":
+                        # print "be skip"
+                        continue
 
-                                if (
-                                    dependent_type == "xcomp"
-                                    and token_store[
-                                        (int(dependents[1].get("idx")) - 1)
-                                    ][3]
-                                    in nominals
-                                ):
-                                    dependent_type = "ncomp"
+                    for item in pre_simple_VAC:
+                        simple_VAC.append(item[1])
+                        complex_VAC.append("_".join([item[1], item[2]]))
+                        if "prep" in item[1] and "prepc" not in item[1]:
+                            prep_VAC.append("prep")
+                        else:
+                            prep_VAC.append(item[1])
+                    simple_VAC_string = "-".join(simple_VAC).lower()
+                    complex_VAC_string = "-".join(complex_VAC).lower()
 
-                                if (
-                                    dependent_type == "aux"
-                                    and token_store[
-                                        (int(dependents[1].get("idx")) - 1)
-                                    ][3]
-                                    == "MD"
-                                ):
-                                    dependent_type = "modal"
+                    if "-v_be-" in complex_VAC_string:
+                        complex_VAC_string = complex_VAC_string.replace(
+                            "-v_be-", "-vcop_be-"
+                        )
+                        simple_VAC_string = simple_VAC_string.replace("-v-", "-vcop-")
 
-                                VAC.append(
-                                    [dependent_id, dependent_type, dependent_form]
-                                )
-
-                VAC = sorted(VAC, key=lambda x: int(x[0]))
-                auxilliaries = ["aux", "auxpass", "modal"]
-                pre_simple_VAC = []
-                simple_VAC = []
-                complex_VAC = []
-                prep_VAC = []
-                simple_VAC_aux = []
-
-                for item in VAC:
-                    simple_VAC_aux.append(item[1])
-                    if item[1] not in auxilliaries:
-                        pre_simple_VAC.append(item)
-
-                # print len(pre_simple_VAC), pre_simple_VAC
-
-                if len(pre_simple_VAC) < 2 and str(pre_simple_VAC[0][0]) in gerunds:
-                    # print "g skip"
-                    continue
-
-                if len(pre_simple_VAC) < 2 and str(pre_simple_VAC[0][0]) in infinitives:
-                    # print "skip"
-                    continue
-
-                if len(pre_simple_VAC) < 2 and pre_simple_VAC[0][2] == "be":
-                    # print "be skip"
-                    continue
-
-                for item in pre_simple_VAC:
-                    simple_VAC.append(item[1])
-                    complex_VAC.append("_".join([item[1], item[2]]))
-                    if "prep" in item[1] and "prepc" not in item[1]:
-                        prep_VAC.append("prep")
-                    else:
-                        prep_VAC.append(item[1])
-                simple_VAC_string = "-".join(simple_VAC).lower()
-                complex_VAC_string = "-".join(complex_VAC).lower()
-
-                if "-v_be-" in complex_VAC_string:
-                    complex_VAC_string = complex_VAC_string.replace(
-                        "-v_be-", "-vcop_be-"
+                    sentence_string = " ".join(sentence)
+                    database_string = (
+                        "\t".join(
+                            [
+                                verb_form.lower(),
+                                word_entry,
+                                simple_VAC_string,
+                                complex_VAC_string,
+                                "-".join(simple_VAC_aux).lower(),
+                                outfilename,
+                                sentence_string,
+                            ]
+                        )
+                        + "\n"
                     )
-                    simple_VAC_string = simple_VAC_string.replace("-v-", "-vcop-")
-
-                sentence_string = " ".join(sentence)
-                database_string = (
-                    "\t".join(
-                        [
-                            verb_form.lower(),
-                            word_entry,
-                            simple_VAC_string,
-                            complex_VAC_string,
-                            "-".join(simple_VAC_aux).lower(),
-                            outfilename,
-                            sentence_string,
-                        ]
+                    database_string_clean = filter(
+                        lambda x: x in string.printable, database_string
                     )
-                    + "\n"
-                )
-                database_string_clean = filter(
-                    lambda x: x in string.printable, database_string
-                )
-                data_file.write(database_string_clean)
+                    data_file.write(database_string_clean)
 
-        nfiles += 1  # add to counter
-
-        data_file.flush()
-        data_file.close()
+            nfiles += 1  # add to counter
 
     ######Clean-up:
     folder_list = [resource_path("parsed_files/"), resource_path("to_process/")]
@@ -783,7 +784,7 @@ def main(language, indir, outfile):
 
     finishmessage = "Processed " + str(nfiles) + " Files"
     dataQueue.put(finishmessage)
-    root.update_idletasks()
+    QApplication.processEvents()
     if system == "M":
         # self.progress.config(text =finishmessage)
         import tkinter.messagebox as tkMessageBox
