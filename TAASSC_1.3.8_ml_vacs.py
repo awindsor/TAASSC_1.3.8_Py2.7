@@ -1,9 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
-import tkinter as tk
-import tkinter.font as tkFont
-import tkinter.filedialog as tkFileDialog
-import tkinter.constants as Tkconstants
+from PySide6.QtWidgets import (
+    QApplication,
+    QWidget,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFileDialog,
+    QMessageBox,
+    QComboBox,
+    QFrame,
+)
+from PySide6.QtCore import Qt, QThread, Signal, Slot
 import shutil
 import platform
 import sys
@@ -18,9 +27,18 @@ import queue
 import string
 
 MODELS = {
-    "English": "stanford-corenlp-3.5.1-models.jar",
-    "Chinese": "stanford-chinese-corenlp-2015-01-30-models.jar",
-    "Spanish": "stanford-spanish-corenlp-2015-12-09-models.jar",
+    "English": (
+        "stanford-corenlp-3.5.1-models.jar",
+        "-annotators tokenize,ssplit,pos,lemma",
+    ),
+    "Chinese": (
+        "stanford-chinese-corenlp-2015-01-30-models.jar",
+        "-props StanfordCoreNLP-chinese.properties",
+    ),
+    "Spanish": (
+        "stanford-spanish-corenlp-2015-12-09-models.jar",
+        "-props StanfordCoreNLP-spanish.properties",
+    ),
 }
 
 
@@ -88,24 +106,22 @@ def call_stan_corenlp_pos(
     root,
     parse_type="",
 ):  # for CoreNLP 3.5.1 (most recent compatible version)
+
+    model, args = MODELS[language]
     if language == "English":
-        args = "-annotators tokenize,ssplit,pos,lemma" + parse_type
-    elif language == "Spanish":
-        args = "-props StanfordCoreNLP-spanish.properties"
-    elif language == "Chinese":
-        args = "-props StanfordCoreNLP-chinese.properties"
-    model = MODELS[language]
-    # mac osx call:
+        args += " " + parse_type
+        # mac osx call:
     if system == "M" or system == "L":
         print(class_path)
         call_parser = (
             "java -cp "
             + class_path
-            + "stanford-corenlp-3.5.1.jar:stanford-corenlp-3.5.1-sources.jar:"
+            + "stanford-corenlp-3.5.1.jar:stanford-corenlp-3.5.1.jar:"
             + model
             + ":xom.jar: -Xmx"
             + memory
-            + "g edu.stanford.nlp.pipeline.StanfordCoreNLP -threads "
+            + "g edu.stanford.nlp.pipeline.StanfordCoreNLP "
+            + "-threads "
             + nthreads
             + " "
             + args
@@ -169,234 +185,130 @@ progress = "...Waiting for Data to Process"
 dataQueue.put(progress)
 
 
+class WorkerThread(QThread):
+    update = Signal(str)
+
+    def __init__(self, func, *args):
+        super().__init__()
+        self.func = func
+        self.args = args
+
+    def run(self):
+        self.func(*self.args)
+
+
 def start_thread(def1, *args):
-    t = Thread(target=def1, args=args)
-    t.start()
+    thread = WorkerThread(def1, *args)
+    thread.start()
 
 
-class MyApp:
-    def __init__(self, parent):
+class MyApp(QWidget):
+    def __init__(self):
+        super().__init__()
 
-        # Creates font styles - Task: Make these pretty!
-        helv14 = tkFont.Font(family="Helvetica", size=font_size)
-        helv16 = tkFont.Font(
-            family="Helvetica", size=title_size, weight="bold", slant="italic"
+        self.setWindowTitle("TAASSC VACS")
+        self.setStyleSheet(f"background-color: {color};")
+        self.setGeometry(100, 100, 425, 450)
+
+        self.layout = QVBoxLayout()
+
+        self.spacer1 = QLabel("TAASSC VACS")
+        self.spacer1.setStyleSheet(
+            f"font-size: {title_size}px; font-weight: bold; font-style: italic;"
         )
+        self.layout.addWidget(self.spacer1, alignment=Qt.AlignCenter)
 
-        # This defines the GUI parent (ish)
-        self.myParent = parent
+        self.instruction_frame = QFrame()
+        self.instruction_layout = QVBoxLayout()
+        self.instruction_frame.setLayout(self.instruction_layout)
+        self.instruction_frame.setStyleSheet(f"background-color: {color};")
+        self.layout.addWidget(self.instruction_frame)
 
-        # This creates the header text - Task:work with this to make more pretty!
-        self.spacer1 = tk.Label(
-            parent, text="TAASSC VACS", font=helv16, background=color
+        self.instruct = QLabel(
+            "1. Choose the input folder (where your files are)\n2. Select your output filename\n3. Select the model\n4. Press the 'Process Texts' button"
         )
-        self.spacer1.pack()
+        self.instruct.setStyleSheet(f"font-size: {font_size}px;")
+        self.instruction_layout.addWidget(self.instruct)
 
-        # This creates a frame for the meat of the GUI
-        self.thestuff = tk.Frame(parent, background=color)
-        self.thestuff.pack()
+        self.button1 = QPushButton("Select Input Folder")
+        self.button1.clicked.connect(self.button1Click)
+        self.instruction_layout.addWidget(self.button1)
 
-        # Within the 'thestuff' frame, this creates a frame on the left for the buttons/input
-        self.myContainer1 = tk.Frame(self.thestuff, background=color)
-        self.myContainer1.pack(side=tk.RIGHT, expand=tk.TRUE)
+        self.inputdirlabel = QLabel("Your selected input folder: (No Folder Chosen)")
+        self.inputdirlabel.setStyleSheet(f"font-size: {font_size}px;")
+        self.instruction_layout.addWidget(self.inputdirlabel)
 
-        # Text to be displayed above the widgets AND for a line to be placed around the elements
-        self.labelframe2 = tk.LabelFrame(
-            self.myContainer1, text="Instructions", background=color
+        self.button2 = QPushButton("Choose Output Filename")
+        self.button2.clicked.connect(self.button2Click)
+        self.instruction_layout.addWidget(self.button2)
+
+        self.outputdirlabel = QLabel(
+            "Your selected filename: (No Output Filename Chosen)"
         )
-        self.labelframe2.pack(expand=tk.TRUE)
+        self.outputdirlabel.setStyleSheet(f"font-size: {font_size}px;")
+        self.instruction_layout.addWidget(self.outputdirlabel)
 
-        # This creates the list of instructions. There may be a better way to do this...
-        self.instruct = tk.Label(
-            self.labelframe2,
-            height="5",
-            width="45",
-            justify=tk.LEFT,
-            padx="4",
-            pady="6",
-            anchor=tk.W,
-            font=helv14,
-            text="1. Choose the input folder (where your files are)\n2. Select your output filename\n3. Select the model\n4. Press the 'Process Texts' button",
+        self.modellabel = QLabel("Select Model:")
+        self.modellabel.setStyleSheet(f"font-size: {font_size}px;")
+        self.instruction_layout.addWidget(self.modellabel)
+
+        self.model_menu = QComboBox()
+        self.model_menu.addItems(["Chinese", "Spanish", "English"])
+        self.instruction_layout.addWidget(self.model_menu)
+
+        self.button3 = QPushButton("Process Texts")
+        self.button3.clicked.connect(self.runprogram)
+        self.instruction_layout.addWidget(self.button3)
+
+        self.progresslabelframe = QLabel(
+            "Program Status: ...Waiting for Data to Process"
         )
-        self.instruct.pack()
+        self.progresslabelframe.setStyleSheet(f"font-size: {font_size}px;")
+        self.instruction_layout.addWidget(self.progresslabelframe)
 
-        # Creates Label Frame for Data Input area
-        self.secondframe = tk.LabelFrame(
-            self.myContainer1, text="Data Input", background=color
-        )
-        self.secondframe.pack(expand=tk.TRUE)
-        # This Places the first button under the instructions.
-        self.button1 = tk.Button(self.secondframe)
-        self.button1.configure(text="Select Input Folder")
-        self.button1.pack()
+        self.setLayout(self.layout)
 
-        # This tells the button what to do when clicked. Currently, only a left-click
-        # makes the button do anything (e.g. <Button-1>). The second argument is a "def"
-        # That is defined later in the program.
-        self.button1.bind("<Button-1>", self.button1Click)
-
-        # Creates default dirname so if statement in Process Texts can check to see
-        # if a directory name has been chosen
-        self.dirname = ""
-
-        # This creates a label for the first program input (Input Directory)
-        self.inputdirlabel = tk.LabelFrame(
-            self.secondframe,
-            height="1",
-            width="45",
-            padx="4",
-            text="Your selected input folder:",
-            background=color,
-        )
-        self.inputdirlabel.pack()
-
-        # Creates label that informs user which directory has been chosen
-        directoryprompt = "(No Folder Chosen)"
-        self.inputdirchosen = tk.Label(
-            self.inputdirlabel,
-            height="1",
-            width="44",
-            justify=tk.LEFT,
-            padx="4",
-            anchor=tk.W,
-            font=helv14,
-            text=directoryprompt,
-        )
-        self.inputdirchosen.pack()
-
-        # This creates the Output Directory button.
-        self.button2 = tk.Button(self.secondframe)
-        self.button2["text"] = "Choose Output Filename"
-        # This tells the button what to do if clicked.
-        self.button2.bind("<Button-1>", self.button2Click)
-        self.button2.pack()
-        self.outdirname = ""
-
-        # Creates a label for the second program input (Output Directory)
-        self.outputdirlabel = tk.LabelFrame(
-            self.secondframe,
-            height="1",
-            width="45",
-            padx="4",
-            text="Your selected filename:",
-            background=color,
-        )
-        self.outputdirlabel.pack()
-
-        # Creates a label that informs sure which directory has been chosen
-        outdirectoryprompt = "(No Output Filename Chosen)"
-        self.input2 = ""
-        self.outputdirchosen = tk.Label(
-            self.outputdirlabel,
-            height="1",
-            width="44",
-            justify=tk.LEFT,
-            padx="4",
-            anchor=tk.W,
-            font=helv14,
-            text=outdirectoryprompt,
-        )
-        self.outputdirchosen.pack()
-
-        # Creates a dropdown menu for model selection
-        self.modellabel = tk.LabelFrame(
-            self.secondframe,
-            height="1",
-            width="45",
-            padx="4",
-            text="Select Model:",
-            background=color,
-        )
-        self.modellabel.pack()
-        self.model_var = tk.StringVar(self.modellabel)
-        self.model_var.set("English")  # default value
-        self.model_menu = tk.OptionMenu(
-            self.modellabel, self.model_var, "Chinese", "Spanish", "English"
-        )
-        self.model_menu.pack()
-
-        self.myContainer2 = tk.Frame(self.secondframe)
-        self.myContainer2.pack()
-
-        self.BottomSpace = tk.LabelFrame(
-            self.myContainer1, text="Run Program", background=color
-        )
-        self.BottomSpace.pack()
-
-        self.button3 = tk.Button(self.BottomSpace)
-        self.button3["text"] = "Process Texts"
-        self.button3.bind("<Button-1>", self.runprogram)
-        self.button3.pack()
-
-        self.progresslabelframe = tk.LabelFrame(
-            self.BottomSpace, text="Program Status", background=color
-        )
-        self.progresslabelframe.pack(expand=tk.TRUE)
-
-        # progress = "...Waiting for Data to Process"
-        self.progress = tk.Label(
-            self.progresslabelframe,
-            height="1",
-            width="45",
-            justify=tk.LEFT,
-            padx="4",
-            anchor=tk.W,
-            font=helv14,
-            text=progress,
-        )
-        self.progress.pack()
-
-        self.poll(self.progress)
-
-    def button1Click(self, event):
-        import tkinter.filedialog as tkFileDialog
-
-        self.dirname = tkFileDialog.askdirectory(
-            parent=root, title="Please select a directory"
+    def button1Click(self):
+        self.dirname = QFileDialog.getExistingDirectory(
+            self, "Please select a directory"
         )
         if self.dirname == "":
-            self.displayinputtext = "(No Folder Chosen)"
+            self.inputdirlabel.setText("Your selected input folder: (No Folder Chosen)")
         else:
-            self.displayinputtext = ".../" + self.dirname.split("/")[-1]
-        self.inputdirchosen.config(text=self.displayinputtext)
-
-    def button2Click(self, event):
-        self.outdirname = tkFileDialog.asksaveasfilename(
-            parent=root,
-            defaultextension=".txt",
-            initialfile="results",
-            title="Choose Output Filename",
-        )
-        if self.outdirname == "":
-            self.displayoutputtext = "(No Output Filename Chosen)"
-        else:
-            self.displayoutputtext = ".../" + self.outdirname.split("/")[-1]
-        self.outputdirchosen.config(text=self.displayoutputtext)
-
-    def runprogram(self, event):
-        self.poll(self.progress)
-        import tkinter.messagebox as tkMessageBox
-
-        if self.dirname == "":
-            tkMessageBox.showinfo("Supply Information", "Choose Input Directory")
-        if self.outdirname == "":
-            tkMessageBox.showinfo("Choose Output Filename", "Choose Output Filename")
-        else:
-            model = self.model_var.get()
-            dataQueue.put("Starting TAASSC...")
-            start_thread(
-                main,
-                model,
-                self.dirname,
-                self.outdirname,
+            self.inputdirlabel.setText(
+                f"Your selected input folder: .../{self.dirname.split('/')[-1]}"
             )
 
-    def poll(self, function):
-        self.myParent.after(10, self.poll, function)
-        try:
-            function.config(text=dataQueue.get(block=False))
-        except queue.Empty:
-            pass
+    def button2Click(self):
+        self.outdirname = QFileDialog.getSaveFileName(
+            self, "Choose Output Filename", "", "Text Files (*.txt)"
+        )[0]
+        if self.outdirname == "":
+            self.outputdirlabel.setText(
+                "Your selected filename: (No Output Filename Chosen)"
+            )
+        else:
+            self.outputdirlabel.setText(
+                f"Your selected filename: .../{self.outdirname.split('/')[-1]}"
+            )
+
+    def runprogram(self):
+        if self.dirname == "":
+            QMessageBox.information(
+                self, "Supply Information", "Choose Input Directory"
+            )
+        elif self.outdirname == "":
+            QMessageBox.information(
+                self, "Choose Output Filename", "Choose Output Filename"
+            )
+        else:
+            model = self.model_menu.currentText()
+            dataQueue.put("Starting TAASSC...")
+            start_thread(main, model, self.dirname, self.outdirname)
+
+    @Slot(str)
+    def update_progress(self, message):
+        self.progresslabelframe.setText(f"Program Status: {message}")
 
 
 def main(language, indir, outfile):
@@ -903,12 +815,7 @@ class Catcher:
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.wm_title("TAASSC 1.3.8")
-    root.configure(background=color)
-    # sets starting size: NOTE: it doesn't appear as though Tkinter will let you make the
-    # starting size smaller than the space needed for widgets.
-    root.geometry(geom_size)
-    tk.CallWrapper = Catcher
-    myapp = MyApp(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    myapp = MyApp()
+    myapp.show()
+    sys.exit(app.exec())
