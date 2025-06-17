@@ -1,0 +1,34 @@
+# Pipeline options - lemma is no-op for Chinese but currently needed because coref demands it (bad old requirements system)
+annotators = tokenize, ssplit, pos, lemma, ner, parse, coref
+
+# segment
+tokenize.language = zh
+segment.model = edu/stanford/nlp/models/segmenter/chinese/ctb.gz
+segment.sighanCorporaDict = edu/stanford/nlp/models/segmenter/chinese
+segment.serDictionary = edu/stanford/nlp/models/segmenter/chinese/dict-chris6.ser.gz
+segment.sighanPostProcessing = true
+
+# sentence split
+ssplit.boundaryTokenRegex = [.。]|[!?！？]+
+
+# pos
+pos.model = edu/stanford/nlp/models/pos-tagger/chinese-distsim.tagger
+
+# ner
+ner.language = chinese
+ner.model = edu/stanford/nlp/models/ner/chinese.misc.distsim.crf.ser.gz
+ner.applyNumericClassifiers = true
+ner.useSUTime = false
+
+# regexner
+ner.fine.regexner.mapping = edu/stanford/nlp/models/kbp/chinese/gazetteers/cn_regexner_mapping.tab
+ner.fine.regexner.noDefaultOverwriteLabels = CITY,COUNTRY,STATE_OR_PROVINCE
+
+# parse
+parse.model = edu/stanford/nlp/models/srparser/chineseSR.ser.gz
+
+# depparse
+depparse.model    = edu/stanford/nlp/models/parser/nndep/UD_Chinese.gz
+depparse.language = chinese
+
+# coref
