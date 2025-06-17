@@ -1,0 +1,10 @@
+to_process/
+parsed_files/
+sca_parsed_files/
+__pycache__/
+.mypycache/
+_filelist.txt
+*.pyc
+*.pyo
+*.pyd
+*.pkl
